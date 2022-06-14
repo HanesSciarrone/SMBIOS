@@ -13,6 +13,8 @@
 #include <windows.h>
 
 #include <iostream>
+#include <iomanip>
+#include <fstream>
 #include <sstream>
 #include <memory>
 #include <string>
@@ -20,7 +22,8 @@
 
 #include "windowsHelper.h"
 
-constexpr auto BASEBOARD_INFORMATION_TYPE{2};
+constexpr auto BASEBOARD_INFORMATION_TYPE{ 2 };
+constexpr auto FILE_NAME { "Output" };
 static const std::map<std::string, DWORD> gs_firmwareTableProviderSignature
 {
     {"ACPI", 0x41435049},
@@ -64,20 +67,11 @@ static std::string parseRawSmbios(const BYTE* rawData, const DWORD rawDataSize)
 
     while (offset < rawDataSize)
     {
-        ss << std::hex << int(*(rawData+offset));
+        ss << std::hex << std::setfill('0') << std::setw(2) << int(*(rawData+offset));
         ss << " ";
-
-        if (!(*(rawData + offset)) && !(*(rawData + offset + 1)))
-        {
-            offset++;
-            ss << std::hex << int(*(rawData+offset));
-            ss << std::endl << std::endl;
-        }
-
         offset++;
     }
 
-    ss << std::endl << std::endl << std::endl << std::endl << std::endl;
     std::cout << ss.str();
     offset = 0;
 
@@ -85,13 +79,14 @@ static std::string parseRawSmbios(const BYTE* rawData, const DWORD rawDataSize)
     {
         SMBIOSStructureHeader header{};
         memcpy(&header, rawData + offset, sizeof(SMBIOSStructureHeader));
+
         if (BASEBOARD_INFORMATION_TYPE == header.Type)
         {
             SMBIOSBasboardInfoStructure info{};
             memcpy(&info, rawData + offset, sizeof(SMBIOSBasboardInfoStructure));
             offset += info.FormattedAreaLength;
-            std::cout << "info.FormattedAreaLength = " << std::hex << int(info.FormattedAreaLength) << std::endl;
-            std::cout << "info.SerialNumber = " << std::hex << int(info.SerialNumber) << std::endl;
+            std::cout << "info.FormattedAreaLength = " << std::hex << std::setfill('0') << std::setw(2) << int(info.FormattedAreaLength) << std::endl;
+            std::cout << "info.SerialNumber = " << std::hex << std::setfill('0') << std::setw(2) << int(info.SerialNumber) << std::endl;
 
             for (BYTE i = 1; i < info.SerialNumber; ++i)
             {
@@ -125,6 +120,8 @@ static std::string parseRawSmbios(const BYTE* rawData, const DWORD rawDataSize)
 int main()
 {
     std::string ret;
+    std::stringstream name;
+    auto index { 1ull };
 
     while(1)
     {
@@ -143,10 +140,23 @@ int main()
                     // Get raw SMBIOS firmware table
                     if (pfnGetSystemFirmwareTable(gs_firmwareTableProviderSignature.at("RSMB"), 0, spBuff.get(), size) == size)
                     {
-                        PRawSMBIOSData smbios{reinterpret_cast<PRawSMBIOSData>(spBuff.get())};
-                        // Parse SMBIOS structures
-                        ret = parseRawSmbios(smbios->SMBIOSTableData, size);
-                        std::cout << "Serial number = " << ret << std::endl << std::endl << std::endl;
+                        name.str("");
+                        name << FILE_NAME << index << ".txt";
+                        std::ofstream file { name.str(), std::ios_base::binary };
+
+                        if (file.is_open())
+                        {
+                            file.write(reinterpret_cast<const char *>(spBuff.get()), size);
+                            index++;
+                        }
+
+                        if (ret.empty())
+                        {
+                            PRawSMBIOSData smbios{reinterpret_cast<PRawSMBIOSData>(spBuff.get())};
+                            // Parse SMBIOS structures
+                            ret = parseRawSmbios(smbios->SMBIOSTableData, size);
+                            std::cout << "Serial number = " << ret << std::endl << std::endl << std::endl;
+                        }
                     }
                 }
             }
