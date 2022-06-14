@@ -13,6 +13,7 @@
 #include <windows.h>
 
 #include <iostream>
+#include <sstream>
 #include <memory>
 #include <string>
 #include <map>
@@ -58,7 +59,28 @@ typedef struct SMBIOSBasboardInfoStructure
 static std::string parseRawSmbios(const BYTE* rawData, const DWORD rawDataSize)
 {
     std::string serialNumber;
+    std::stringstream ss;
     DWORD offset{0};
+
+    while (offset < rawDataSize)
+    {
+        ss << std::hex << int(*(rawData+offset));
+        ss << " ";
+
+        if (!(*(rawData + offset)) && !(*(rawData + offset + 1)))
+        {
+            offset++;
+            ss << std::hex << int(*(rawData+offset));
+            ss << std::endl << std::endl;
+        }
+
+        offset++;
+    }
+
+    ss << std::endl << std::endl << std::endl << std::endl << std::endl;
+    std::cout << ss.str();
+    offset = 0;
+
     while (offset < rawDataSize && serialNumber.empty())
     {
         SMBIOSStructureHeader header{};
@@ -68,9 +90,13 @@ static std::string parseRawSmbios(const BYTE* rawData, const DWORD rawDataSize)
             SMBIOSBasboardInfoStructure info{};
             memcpy(&info, rawData + offset, sizeof(SMBIOSBasboardInfoStructure));
             offset += info.FormattedAreaLength;
+            std::cout << "info.FormattedAreaLength = " << std::hex << int(info.FormattedAreaLength) << std::endl;
+            std::cout << "info.SerialNumber = " << std::hex << int(info.SerialNumber) << std::endl;
+
             for (BYTE i = 1; i < info.SerialNumber; ++i)
             {
                 const char* tmp{reinterpret_cast<const char*>(rawData + offset)};
+                std::cout << "Data = " << tmp << std::endl;
                 const auto len{ strlen(tmp) };
                 offset += len + sizeof(char);
             }
@@ -100,11 +126,8 @@ int main()
 {
     std::string ret;
 
-    std::cout << "Start program" << std::endl;
     while(1)
     {
-
-        std::cout << "Start loop" << std::endl;
         static auto pfnGetSystemFirmwareTable{Utils::getSystemFirmwareTableFunctionAddress()};
 
         if (pfnGetSystemFirmwareTable)
@@ -123,7 +146,7 @@ int main()
                         PRawSMBIOSData smbios{reinterpret_cast<PRawSMBIOSData>(spBuff.get())};
                         // Parse SMBIOS structures
                         ret = parseRawSmbios(smbios->SMBIOSTableData, size);
-                        std::cout << "Serial number = " << ret << std::endl;
+                        std::cout << "Serial number = " << ret << std::endl << std::endl << std::endl;
                     }
                 }
             }
@@ -133,10 +156,8 @@ int main()
             }
         }
 
-        std::cout << "End loop" << std::endl;
         sleep(10);
     }
 
-    std::cout << "End program" << std::endl;
     return 0;
 }
